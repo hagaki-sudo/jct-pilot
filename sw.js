@@ -1,4 +1,4 @@
-const CACHE_NAME = "jct-pilot-v8";
+const CACHE_NAME = "jct-pilot-v9";
 const SYSTEM_AUDIO = ["start-guide", "start-demo", "resume-demo", "voice-on"]
   .map((name) => `./audio/${name}.mp3`);
 const ROUTE_AUDIO = Array.from({ length: 15 }, (_, index) =>
@@ -26,5 +26,24 @@ self.addEventListener("activate", (event) => {
 });
 
 self.addEventListener("fetch", (event) => {
+  if (event.request.method !== "GET") return;
+  const url = new URL(event.request.url);
+  const isAppShell =
+    url.origin === self.location.origin &&
+    (event.request.mode === "navigate" || /\.(?:html|js|css|webmanifest)$/.test(url.pathname));
+
+  if (isAppShell) {
+    event.respondWith(
+      fetch(event.request)
+        .then((response) => {
+          const copy = response.clone();
+          caches.open(CACHE_NAME).then((cache) => cache.put(event.request, copy));
+          return response;
+        })
+        .catch(() => caches.match(event.request))
+    );
+    return;
+  }
+
   event.respondWith(caches.match(event.request).then((cached) => cached ?? fetch(event.request)));
 });

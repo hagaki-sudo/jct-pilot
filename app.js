@@ -74,6 +74,11 @@ const state = {
   activeUtterance: null,
   speechUnlocked: false,
   audioUnlocked: false,
+  audioContext: null,
+  audioSource: null,
+  keepAliveOscillator: null,
+  audioBuffers: new Map(),
+  audioRequestId: 0,
 };
 
 const el = Object.fromEntries([
@@ -81,7 +86,7 @@ const el = Object.fromEntries([
   "currentDirection", "distanceNumber", "distanceUnit", "junctionName",
   "instructionText", "destinationText", "turnSymbol", "laneArrow", "heroCard",
   "routeTitle", "progressCount", "routeTrack", "afterNext", "routeSelect",
-  "gpsButton", "demoButton", "stopButton", "toast", "signShield", "audioPlayer",
+  "gpsButton", "demoButton", "stopButton", "toast", "signShield", "audioPlayer", "audioStatus",
 ].map((id) => [id, document.getElementById(id)]));
 
 function init() {
@@ -96,6 +101,11 @@ function init() {
   el.demoButton.addEventListener("click", toggleDemo);
   el.stopButton.addEventListener("click", stopGuidance);
   el.soundToggle.addEventListener("click", toggleSound);
+  document.addEventListener("visibilitychange", () => {
+    if (!document.hidden && state.sound && state.mode !== "standby") {
+      state.audioContext?.resume().catch(() => {});
+    }
+  });
   render();
 
   if ("serviceWorker" in navigator && location.protocol !== "file:") {
@@ -232,8 +242,7 @@ function stopGuidance(showToast = true) {
   if (state.watchId !== null) navigator.geolocation.clearWatch(state.watchId);
   clearInterval(state.demoTimer);
   window.speechSynthesis?.cancel();
-  el.audioPlayer.pause();
-  el.audioPlayer.currentTime = 0;
+  stopCurrentAudio();
   state.watchId = null;
   state.demoTimer = null;
   state.mode = "standby";
@@ -252,8 +261,8 @@ function toggleSound() {
   el.soundToggle.setAttribute("aria-pressed", String(state.sound));
   if (!state.sound) {
     window.speechSynthesis?.cancel();
-    el.audioPlayer.pause();
-    el.audioPlayer.currentTime = 0;
+    stopCurrentAudio();
+    state.audioContext?.suspend().catch(() => {});
     state.activeUtterance = null;
   } else {
     unlockAudio("voice-on");
@@ -266,20 +275,88 @@ function unlockAudio(key) {
   playRecordedAudio(key, true);
 }
 
-function playRecordedAudio(key, showError = false) {
-  if (!state.sound || !el.audioPlayer) return false;
+function setAudioStatus(message) {
+  if (el.audioStatus) el.audioStatus.textContent = `${message}（Build 9）`;
+}
+
+function activateAudioSession() {
+  const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+  if (!AudioContextClass) return null;
+  if (!state.audioContext || state.audioContext.state === "closed") {
+    state.audioContext = new AudioContextClass();
+    const oscillator = state.audioContext.createOscillator();
+    const keepAliveGain = state.audioContext.createGain();
+    oscillator.frequency.value = 20;
+    keepAliveGain.gain.value = 0.00001;
+    oscillator.connect(keepAliveGain).connect(state.audioContext.destination);
+    oscillator.start();
+    state.keepAliveOscillator = oscillator;
+  }
+  // 必ずユーザーのタップ処理内で最初のresumeを呼び、以降も同じ音声セッションを使う。
+  state.audioContext.resume().catch(() => {});
+  return state.audioContext;
+}
+
+function stopCurrentAudio(cancelPending = true) {
+  if (cancelPending) state.audioRequestId += 1;
+  if (state.audioSource) {
+    try { state.audioSource.stop(); } catch {}
+    state.audioSource = null;
+  }
   el.audioPlayer.pause();
+  el.audioPlayer.currentTime = 0;
+}
+
+function playWithAudioElement(key, showError) {
   el.audioPlayer.src = `./audio/${key}.mp3`;
   el.audioPlayer.currentTime = 0;
   const playback = el.audioPlayer.play();
-  if (playback?.then) {
-    playback
-      .then(() => { state.audioUnlocked = true; })
-      .catch(() => {
-        if (showError) notify("音声ファイルを再生できません。公開先のaudioフォルダをご確認ください");
-      });
-  } else {
+  playback?.then(() => {
     state.audioUnlocked = true;
+    setAudioStatus(`再生中: ${key}`);
+  }).catch((error) => {
+    setAudioStatus(`再生失敗: ${error.name || "MediaError"}`);
+    if (showError) notify("音声を再生できません。VOICEをオフ→オンにしてください");
+  });
+}
+
+async function playRecordedAudio(key, showError = false) {
+  if (!state.sound || !el.audioPlayer) return false;
+  const requestId = ++state.audioRequestId;
+  const context = activateAudioSession();
+  if (!context) {
+    playWithAudioElement(key, showError);
+    return true;
+  }
+
+  try {
+    await context.resume();
+    let buffer = state.audioBuffers.get(key);
+    if (!buffer) {
+      const response = await fetch(`./audio/${key}.mp3`, { cache: "force-cache" });
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      buffer = await context.decodeAudioData(await response.arrayBuffer());
+      state.audioBuffers.set(key, buffer);
+    }
+    if (requestId !== state.audioRequestId || !state.sound) return false;
+    stopCurrentAudio(false);
+    const source = context.createBufferSource();
+    source.buffer = buffer;
+    source.connect(context.destination);
+    source.onended = () => {
+      if (state.audioSource === source) {
+        state.audioSource = null;
+        setAudioStatus("準備完了");
+      }
+    };
+    state.audioSource = source;
+    state.audioUnlocked = true;
+    setAudioStatus(`再生中: ${key}`);
+    source.start(0);
+  } catch (error) {
+    if (requestId !== state.audioRequestId || !state.sound) return false;
+    setAudioStatus(`Web Audio失敗: ${error.name || error.message}`);
+    playWithAudioElement(key, showError);
   }
   return true;
 }
