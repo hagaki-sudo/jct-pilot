@@ -71,6 +71,8 @@ const state = {
   spokenThresholds: new Set(),
   lastPosition: null,
   hasInitialMatch: false,
+  activeUtterance: null,
+  speechUnlocked: false,
 };
 
 const el = Object.fromEntries([
@@ -119,6 +121,7 @@ function startGps() {
   state.spokenThresholds.clear();
   renderStatus("GPS", "現在地を取得しています");
   el.stopButton.hidden = false;
+  unlockSpeech("音声案内を開始します");
   state.watchId = navigator.geolocation.watchPosition(onPosition, onGpsError, {
     enableHighAccuracy: true,
     maximumAge: 1000,
@@ -177,6 +180,7 @@ function toggleDemo() {
     el.demoButton.querySelector("strong").textContent = "一時停止";
     el.demoButton.querySelector(".button-icon").textContent = "Ⅱ";
     renderStatus("DEMO LIVE", "時速 約65kmで模擬走行中");
+    unlockSpeech("デモ走行を再開します");
     state.demoTimer = window.setInterval(stepDemo, 250);
     return;
   }
@@ -192,6 +196,7 @@ function toggleDemo() {
   renderStatus("DEMO LIVE", "時速 約65kmで模擬走行中");
   renderJunction();
   renderDistance(state.demoDistance);
+  unlockSpeech("デモ走行を開始します");
   state.demoTimer = window.setInterval(stepDemo, 250);
 }
 
@@ -242,8 +247,53 @@ function stopGuidance(showToast = true) {
 function toggleSound() {
   state.sound = !state.sound;
   el.soundToggle.setAttribute("aria-pressed", String(state.sound));
-  if (!state.sound) window.speechSynthesis?.cancel();
+  if (!state.sound) {
+    window.speechSynthesis?.cancel();
+    state.activeUtterance = null;
+  } else {
+    unlockSpeech("音声案内をオンにしました");
+  }
   notify(state.sound ? "音声案内をオンにしました" : "音声案内をオフにしました");
+}
+
+function unlockSpeech(message) {
+  if (!state.sound) return;
+  const started = speakText(message);
+  if (started) state.speechUnlocked = true;
+}
+
+function speakText(text) {
+  if (!("speechSynthesis" in window) || !("SpeechSynthesisUtterance" in window)) {
+    notify("この端末では音声読み上げを利用できません");
+    return false;
+  }
+
+  const utterance = new SpeechSynthesisUtterance(text);
+  utterance.lang = "ja-JP";
+  utterance.rate = 1.02;
+  const japaneseVoice = window.speechSynthesis
+    .getVoices()
+    .find((voice) => voice.lang?.toLowerCase().startsWith("ja"));
+  if (japaneseVoice) utterance.voice = japaneseVoice;
+
+  utterance.onstart = () => {
+    state.speechUnlocked = true;
+  };
+  utterance.onend = () => {
+    if (state.activeUtterance === utterance) state.activeUtterance = null;
+  };
+  utterance.onerror = (event) => {
+    if (state.activeUtterance === utterance) state.activeUtterance = null;
+    if (!['canceled', 'interrupted'].includes(event.error)) {
+      notify("音声を再生できませんでした。VOICEを押して再試行してください");
+    }
+  };
+
+  // iOS Safariで読み上げ完了前に破棄されないよう参照を保持する。
+  state.activeUtterance = utterance;
+  window.speechSynthesis.cancel();
+  window.speechSynthesis.speak(utterance);
+  return true;
 }
 
 function speakForDistance(distance) {
@@ -253,11 +303,7 @@ function speakForDistance(distance) {
   const jct = state.route.junctions[state.index];
   const phrase = threshold >= 1000 ? `${threshold / 1000}キロ先` : `${threshold}メートル先`;
   const guidance = jct.signText ? jct.instruction : `${jct.instruction}。${jct.destination}方面です`;
-  const utterance = new SpeechSynthesisUtterance(`${phrase}、${jct.name}。${guidance}。`);
-  utterance.lang = "ja-JP";
-  utterance.rate = 1.02;
-  window.speechSynthesis.cancel();
-  window.speechSynthesis.speak(utterance);
+  speakText(`${phrase}、${jct.name}。${guidance}。`);
 }
 
 function render() {

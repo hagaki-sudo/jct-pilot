@@ -1,4 +1,4 @@
-const CACHE_NAME = "jct-pilot-v6";
+const CACHE_NAME = "jct-pilot-v7";
 const FILES = ["./", "./index.html", "./styles.css", "./app.js", "./manifest.webmanifest", "./favicon.svg"];
 
 self.addEventListener("install", (event) => {
