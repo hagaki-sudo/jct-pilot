@@ -73,6 +73,7 @@ const state = {
   hasInitialMatch: false,
   activeUtterance: null,
   speechUnlocked: false,
+  audioUnlocked: false,
 };
 
 const el = Object.fromEntries([
@@ -80,7 +81,7 @@ const el = Object.fromEntries([
   "currentDirection", "distanceNumber", "distanceUnit", "junctionName",
   "instructionText", "destinationText", "turnSymbol", "laneArrow", "heroCard",
   "routeTitle", "progressCount", "routeTrack", "afterNext", "routeSelect",
-  "gpsButton", "demoButton", "stopButton", "toast", "signShield",
+  "gpsButton", "demoButton", "stopButton", "toast", "signShield", "audioPlayer",
 ].map((id) => [id, document.getElementById(id)]));
 
 function init() {
@@ -121,7 +122,7 @@ function startGps() {
   state.spokenThresholds.clear();
   renderStatus("GPS", "現在地を取得しています");
   el.stopButton.hidden = false;
-  unlockSpeech("音声案内を開始します");
+  unlockAudio("start-guide");
   state.watchId = navigator.geolocation.watchPosition(onPosition, onGpsError, {
     enableHighAccuracy: true,
     maximumAge: 1000,
@@ -180,7 +181,7 @@ function toggleDemo() {
     el.demoButton.querySelector("strong").textContent = "一時停止";
     el.demoButton.querySelector(".button-icon").textContent = "Ⅱ";
     renderStatus("DEMO LIVE", "時速 約65kmで模擬走行中");
-    unlockSpeech("デモ走行を再開します");
+    unlockAudio("resume-demo");
     state.demoTimer = window.setInterval(stepDemo, 250);
     return;
   }
@@ -196,7 +197,7 @@ function toggleDemo() {
   renderStatus("DEMO LIVE", "時速 約65kmで模擬走行中");
   renderJunction();
   renderDistance(state.demoDistance);
-  unlockSpeech("デモ走行を開始します");
+  unlockAudio("start-demo");
   state.demoTimer = window.setInterval(stepDemo, 250);
 }
 
@@ -231,6 +232,8 @@ function stopGuidance(showToast = true) {
   if (state.watchId !== null) navigator.geolocation.clearWatch(state.watchId);
   clearInterval(state.demoTimer);
   window.speechSynthesis?.cancel();
+  el.audioPlayer.pause();
+  el.audioPlayer.currentTime = 0;
   state.watchId = null;
   state.demoTimer = null;
   state.mode = "standby";
@@ -249,11 +252,36 @@ function toggleSound() {
   el.soundToggle.setAttribute("aria-pressed", String(state.sound));
   if (!state.sound) {
     window.speechSynthesis?.cancel();
+    el.audioPlayer.pause();
+    el.audioPlayer.currentTime = 0;
     state.activeUtterance = null;
   } else {
-    unlockSpeech("音声案内をオンにしました");
+    unlockAudio("voice-on");
   }
   notify(state.sound ? "音声案内をオンにしました" : "音声案内をオフにしました");
+}
+
+function unlockAudio(key) {
+  if (!state.sound) return;
+  playRecordedAudio(key, true);
+}
+
+function playRecordedAudio(key, showError = false) {
+  if (!state.sound || !el.audioPlayer) return false;
+  el.audioPlayer.pause();
+  el.audioPlayer.src = `./audio/${key}.mp3`;
+  el.audioPlayer.currentTime = 0;
+  const playback = el.audioPlayer.play();
+  if (playback?.then) {
+    playback
+      .then(() => { state.audioUnlocked = true; })
+      .catch(() => {
+        if (showError) notify("音声ファイルを再生できません。公開先のaudioフォルダをご確認ください");
+      });
+  } else {
+    state.audioUnlocked = true;
+  }
+  return true;
 }
 
 function unlockSpeech(message) {
@@ -298,8 +326,14 @@ function speakText(text) {
 
 function speakForDistance(distance) {
   const threshold = [2000, 800, 300].find((value) => distance <= value && !state.spokenThresholds.has(value));
-  if (!threshold || !state.sound || !("speechSynthesis" in window)) return;
+  if (!threshold || !state.sound) return;
   state.spokenThresholds.add(threshold);
+  if (state.route.id === "hatsudai-yokohama-c2") {
+    const clip = `hatsudai-yokohama-c2/${String(state.index).padStart(2, "0")}-${threshold}`;
+    playRecordedAudio(clip, true);
+    return;
+  }
+  if (!("speechSynthesis" in window)) return;
   const jct = state.route.junctions[state.index];
   const phrase = threshold >= 1000 ? `${threshold / 1000}キロ先` : `${threshold}メートル先`;
   const guidance = jct.signText ? jct.instruction : `${jct.instruction}。${jct.destination}方面です`;
