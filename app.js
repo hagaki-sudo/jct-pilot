@@ -90,6 +90,7 @@ const el = Object.fromEntries([
 ].map((id) => [id, document.getElementById(id)]));
 
 function init() {
+  configureAudioSession();
   ROUTES.forEach((route) => {
     const option = document.createElement("option");
     option.value = route.id;
@@ -276,10 +277,19 @@ function unlockAudio(key) {
 }
 
 function setAudioStatus(message) {
-  if (el.audioStatus) el.audioStatus.textContent = `${message}（Build 9）`;
+  if (el.audioStatus) el.audioStatus.textContent = `${message}（Build 10）`;
+}
+
+function configureAudioSession() {
+  if (!("audioSession" in navigator)) return;
+  try {
+    // iOS 17以降では音声をアプリの主要機能として扱わせ、ambient扱いの消音を避ける。
+    navigator.audioSession.type = "playback";
+  } catch {}
 }
 
 function activateAudioSession() {
+  configureAudioSession();
   const AudioContextClass = window.AudioContext || window.webkitAudioContext;
   if (!AudioContextClass) return null;
   if (!state.audioContext || state.audioContext.state === "closed") {

@@ -1,4 +1,4 @@
-const CACHE_NAME = "jct-pilot-v9";
+const CACHE_NAME = "jct-pilot-v10";
 const SYSTEM_AUDIO = ["start-guide", "start-demo", "resume-demo", "voice-on"]
   .map((name) => `./audio/${name}.mp3`);
 const ROUTE_AUDIO = Array.from({ length: 15 }, (_, index) =>

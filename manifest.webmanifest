@@ -3,7 +3,7 @@
   "short_name": "JCT PILOT",
   "description": "首都高の次のJCTを案内する試作アプリ",
   "start_url": "./index.html",
-  "display": "standalone",
+  "display": "browser",
   "background_color": "#050b14",
   "theme_color": "#07111f",
   "lang": "ja",
