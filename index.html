@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#07111f" />
+    <meta name="description" content="首都高の次のJCTと進行方向だけを、運転中にも見やすく案内する試作アプリ" />
+    <link rel="icon" href="./favicon.svg" type="image/svg+xml" />
+    <link rel="manifest" href="./manifest.webmanifest" />
+    <link rel="stylesheet" href="./styles.css" />
+    <title>JCT PILOT</title>
+  </head>
+  <body>
+    <div class="ambient ambient-a"></div>
+    <div class="ambient ambient-b"></div>
+
+    <main class="app-shell">
+      <header class="topbar">
+        <div class="brand">
+          <span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i></span>
+          <div>
+            <p class="eyebrow">SHUTO EXPRESSWAY COMPANION</p>
+            <h1>JCT PILOT</h1>
+          </div>
+        </div>
+        <button class="icon-button" id="soundToggle" aria-label="音声案内を切り替える" aria-pressed="true">
+          <span class="sound-icon" aria-hidden="true">◖))</span>
+          <span class="icon-label">VOICE</span>
+        </button>
+      </header>
+
+      <section class="status-strip" aria-label="走行状態">
+        <span class="live-dot" id="liveDot"></span>
+        <strong id="modeLabel">STANDBY</strong>
+        <span class="status-divider"></span>
+        <span id="accuracyLabel">位置情報を待っています</span>
+        <span class="gps-bars" aria-hidden="true"><i></i><i></i><i></i><i></i></span>
+      </section>
+
+      <section class="hero-card" id="heroCard" aria-live="polite">
+        <div class="hero-topline">
+          <span class="route-badge" id="currentRoad">C1</span>
+          <span class="direction-label" id="currentDirection">都心環状線 内回り</span>
+        </div>
+
+        <div class="distance-row">
+          <span class="distance-prefix">次の分岐まで</span>
+          <strong class="distance-number" id="distanceNumber">—</strong>
+          <span class="distance-unit" id="distanceUnit">km</span>
+        </div>
+
+        <div class="junction-row">
+          <div class="turn-symbol" id="turnSymbol" aria-hidden="true">↖</div>
+          <div class="junction-copy">
+            <p class="junction-kicker">NEXT JUNCTION</p>
+            <h2 id="junctionName">ルートを選択</h2>
+            <p id="instructionText">下のボタンから走行を開始してください</p>
+          </div>
+        </div>
+
+        <div class="lane-card">
+          <span class="lane-arrow" id="laneArrow">↑</span>
+          <div class="sign-copy">
+            <span>案内標識</span>
+            <div class="sign-destination">
+              <b class="sign-shield" id="signShield">C2</b>
+              <strong id="destinationText">—</strong>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="progress-card">
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">ROUTE PROGRESS</p>
+            <h3 id="routeTitle">C1 内回り</h3>
+          </div>
+          <span id="progressCount">0 / 8</span>
+        </div>
+        <div class="route-track" id="routeTrack" aria-label="ルート進捗"></div>
+        <div class="next-after">
+          <span>その次</span>
+          <strong id="afterNext">—</strong>
+        </div>
+      </section>
+
+      <section class="controls-card">
+        <label class="select-wrap">
+          <span>走行ルート</span>
+          <select id="routeSelect"></select>
+        </label>
+        <div class="button-grid">
+          <button class="primary-button" id="gpsButton">
+            <span class="button-icon">◎</span>
+            <span><strong>現在地で開始</strong><small>GPSを使用</small></span>
+          </button>
+          <button class="secondary-button" id="demoButton">
+            <span class="button-icon">▶</span>
+            <span><strong>デモ走行</strong><small>PCでも確認</small></span>
+          </button>
+        </div>
+        <button class="stop-button" id="stopButton" hidden>走行案内を終了</button>
+      </section>
+
+      <details class="notice">
+        <summary>安全上の注意・データについて</summary>
+        <p>運転中は画面を操作しないでください。音声案内を基本に、実際の標識・交通規制を優先してください。この試作版のJCT座標と案内内容は検証用であり、料金や通行可能性を保証しません。</p>
+      </details>
+    </main>
+
+    <div class="toast" id="toast" role="status"></div>
+    <script src="./app.js" defer></script>
+  </body>
+</html>
